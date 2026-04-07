@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Payment - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<style>
+  .payment-tabs { display:flex; gap:0; margin-bottom:24px; border-radius:12px; overflow:hidden; border:1.5px solid #ff6b35; }
+  .pay-tab { flex:1; padding:12px; text-align:center; cursor:pointer; font-weight:600;
+             font-size:0.9rem; background:#fff; color:#ff6b35; border:none; transition:all 0.2s; }
+  .pay-tab.active { background:#ff6b35; color:#fff; }
+  .pay-section { display:none; }
+  .pay-section.active { display:block; }
+  .card-input-wrap { position:relative; }
+  .card-input-wrap input { padding-left:48px !important; }
+  .card-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:1.2rem; }
+  .card-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .upi-apps { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .upi-app-btn { padding:10px 16px; border:1.5px solid #ddd; border-radius:10px;
+                 background:#fff; cursor:pointer; font-size:0.85rem; font-weight:600;
+                 display:flex; align-items:center; gap:6px; transition:all 0.2s; }
+  .upi-app-btn:hover, .upi-app-btn.selected { border-color:#ff6b35; background:#fff8f5; color:#ff6b35; }
+  .bank-list { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+  .bank-btn { padding:12px; border:1.5px solid #ddd; border-radius:10px; background:#fff;
+              cursor:pointer; font-size:0.85rem; font-weight:600; text-align:center; transition:all 0.2s; }
+  .bank-btn:hover, .bank-btn.selected { border-color:#ff6b35; background:#fff8f5; color:#ff6b35; }
+  .processing-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
+  .processing-overlay.show { display:flex; }
+  .processing-box { background:#fff; border-radius:24px; padding:48px 40px; text-align:center; max-width:340px; width:90%; }
+  .spinner { width:60px; height:60px; border:5px solid #f0f0f0; border-top:5px solid #ff6b35;
+             border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 20px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .success-tick { font-size:4rem; display:none; }
+  .fail-cross { font-size:4rem; display:none; color:#f44336; }
+  .secure-badge { display:flex; align-items:center; gap:8px; color:#888; font-size:0.8rem;
+                  justify-content:center; margin-top:16px; }
+</style>
+</head>
+<body>
+
+<!-- Processing Overlay -->
+<div class="processing-overlay" id="processingOverlay">
+  <div class="processing-box">
+    <div class="spinner" id="spinner"></div>
+    <div class="success-tick" id="successTick">✅</div>
+    <div class="fail-cross" id="failCross">❌</div>
+    <div id="processingTitle" style="font-size:1.2rem;font-weight:700;margin-bottom:8px">Processing Payment...</div>
+    <div id="processingMsg" style="color:#888;font-size:0.9rem">Please do not close this window</div>
+    <div id="processingAmount" style="color:#ff6b35;font-weight:800;font-size:1.4rem;margin-top:12px"></div>
+  </div>
+</div>
+
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div class="nav-links"><a href="/cart/cart.html">← Back to Cart</a></div>
+</nav>
+
+<div class="page" style="max-width:720px">
+  <h1 class="page-title">Secure Checkout 🔒</h1>
+  <div id="msg"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+    <!-- LEFT: Order Summary -->
+    <div style="background:#fff;padding:24px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+      <h3 style="margin-bottom:16px;color:#ff6b35">🧾 Order Summary</h3>
+      <div id="orderSummary"></div>
+      <div style="border-top:1px solid #eee;padding-top:12px;margin-top:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.9rem">
+          <span style="color:#666">Subtotal</span><span id="subtotalAmt"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.9rem">
+          <span style="color:#666">Delivery fee</span><span>₹30.00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.15rem;
+                    border-top:1px solid #eee;padding-top:10px;margin-top:6px">
+          <span>Total</span>
+          <span id="totalAmt" style="color:#ff6b35"></span>
+        </div>
+      </div>
+
+      <!-- Delivery Address -->
+      <div style="margin-top:20px">
+        <label style="font-weight:600;font-size:0.9rem;display:block;margin-bottom:6px">📍 Delivery Address</label>
+        <input type="text" id="address" placeholder="Enter full delivery address"
+               style="width:100%;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px;font-size:0.9rem"/>
+      </div>
+
+      <!-- Secure badge -->
+      <div class="secure-badge">
+        <span>🔒</span><span>100% Secure Checkout</span>
+        <span>•</span><span>256-bit SSL</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: Payment Methods -->
+    <div style="background:#fff;padding:24px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+      <h3 style="margin-bottom:16px;color:#ff6b35">💳 Payment Method</h3>
+
+      <!-- Tabs -->
+      <div class="payment-tabs">
+        <button class="pay-tab active" onclick="switchTab('card',this)">💳 Card</button>
+        <button class="pay-tab" onclick="switchTab('upi',this)">📱 UPI</button>
+        <button class="pay-tab" onclick="switchTab('netbanking',this)">🏦 Net Banking</button>
+        <button class="pay-tab" onclick="switchTab('cod',this)">💵 COD</button>
+      </div>
+
+      <!-- CARD -->
+      <div class="pay-section active" id="section-card">
+        <div class="form-group">
+          <label style="font-size:0.85rem;font-weight:600">Card Number</label>
+          <div class="card-input-wrap">
+            <span class="card-icon">💳</span>
+            <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456"
+                   maxlength="19" oninput="formatCard(this)"
+                   style="width:100%;padding:10px 14px 10px 48px;border:1.5px solid #ddd;border-radius:10px"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.85rem;font-weight:600">Cardholder Name</label>
+          <input type="text" id="cardName" placeholder="Name on card"
+                 style="width:100%;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px"/>
+        </div>
+        <div class="card-row">
+          <div class="form-group">
+            <label style="font-size:0.85rem;font-weight:600">Expiry Date</label>
+            <input type="text" id="cardExpiry" placeholder="MM/YY" maxlength="5"
+                   oninput="formatExpiry(this)"
+                   style="width:100%;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px"/>
+          </div>
+          <div class="form-group">
+            <label style="font-size:0.85rem;font-weight:600">CVV</label>
+            <input type="password" id="cardCvv" placeholder="•••" maxlength="3"
+                   style="width:100%;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px"/>
+          </div>
+        </div>
+        <!-- Test cards hint -->
+        <div style="background:#fff8f5;border:1px solid #ffe0d0;border-radius:8px;
+                    padding:10px 14px;font-size:0.8rem;color:#cc4400;margin-bottom:4px">
+          💡 <strong>Test Card:</strong> 4111 1111 1111 1111 | Any future date | Any 3 digits
+        </div>
+      </div>
+
+      <!-- UPI -->
+      <div class="pay-section" id="section-upi">
+        <div style="margin-bottom:14px">
+          <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:8px">Select UPI App</label>
+          <div class="upi-apps">
+            <button class="upi-app-btn" onclick="selectUpiApp(this,'gpay')">🟢 GPay</button>
+            <button class="upi-app-btn" onclick="selectUpiApp(this,'phonepe')">🟣 PhonePe</button>
+            <button class="upi-app-btn" onclick="selectUpiApp(this,'paytm')">🔵 Paytm</button>
+            <button class="upi-app-btn" onclick="selectUpiApp(this,'bhim')">🟠 BHIM</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="font-size:0.85rem;font-weight:600">Or Enter UPI ID</label>
+          <input type="text" id="upiId" placeholder="yourname@upi"
+                 style="width:100%;padding:10px 14px;border:1.5px solid #ddd;border-radius:10px"/>
+        </div>
+        <div style="background:#fff8f5;border:1px solid #ffe0d0;border-radius:8px;
+                    padding:10px 14px;font-size:0.8rem;color:#cc4400">
+          💡 <strong>Test UPI ID:</strong> test@upi
+        </div>
+      </div>
+
+      <!-- NET BANKING -->
+      <div class="pay-section" id="section-netbanking">
+        <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:10px">Select Your Bank</label>
+        <div class="bank-list">
+          <button class="bank-btn" onclick="selectBank(this,'SBI')">🏦 SBI</button>
+          <button class="bank-btn" onclick="selectBank(this,'HDFC')">🏦 HDFC</button>
+          <button class="bank-btn" onclick="selectBank(this,'ICICI')">🏦 ICICI</button>
+          <button class="bank-btn" onclick="selectBank(this,'Axis')">🏦 Axis</button>
+          <button class="bank-btn" onclick="selectBank(this,'Kotak')">🏦 Kotak</button>
+          <button class="bank-btn" onclick="selectBank(this,'PNB')">🏦 PNB</button>
+        </div>
+        <div id="selectedBank" style="color:#888;font-size:0.85rem;text-align:center"></div>
+      </div>
+
+      <!-- COD -->
+      <div class="pay-section" id="section-cod">
+        <div style="text-align:center;padding:24px 0">
+          <div style="font-size:4rem;margin-bottom:16px">💵</div>
+          <h3 style="margin-bottom:8px">Cash on Delivery</h3>
+          <p style="color:#666;font-size:0.9rem">Pay when your order arrives at your door.</p>
+          <div style="background:#e8f5e9;border-radius:10px;padding:12px;margin-top:16px;
+                      color:#2e7d32;font-size:0.85rem;font-weight:600">
+            ✅ No advance payment needed
+          </div>
+        </div>
+      </div>
+
+      <!-- Pay Button -->
+      <button class="btn-orange" id="payBtn"
+              style="width:100%;padding:16px;font-size:1.05rem;margin-top:16px;border-radius:12px"
+              onclick="processPayment()">
+        🔒 Pay <span id="payBtnAmount"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/auth/login.html';
+
+  const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+  if (!cart.length) window.location.href = '/menu/menu.html';
+
+  const subtotal = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+  const total = subtotal + 30;
+
+  // Populate summary
+  document.getElementById('orderSummary').innerHTML = cart.map(c =>
+    `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:0.88rem;border-bottom:1px solid #f5f5f5">
+      <span>${c.name} <span style="color:#999">×${c.quantity}</span></span>
+      <span style="font-weight:600">₹${(c.price * c.quantity).toFixed(2)}</span>
+    </div>`
+  ).join('');
+  document.getElementById('subtotalAmt').textContent = '₹' + subtotal.toFixed(2);
+  document.getElementById('totalAmt').textContent    = '₹' + total.toFixed(2);
+  document.getElementById('payBtnAmount').textContent = '₹' + total.toFixed(2);
+
+  let activeTab = 'card';
+  let selectedUpiApp = '';
+  let selectedBankName = '';
+
+  function switchTab(tab, btn) {
+    activeTab = tab;
+    document.querySelectorAll('.pay-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pay-section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('section-' + tab).classList.add('active');
+  }
+
+  function selectUpiApp(btn, app) {
+    document.querySelectorAll('.upi-app-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedUpiApp = app;
+    document.getElementById('upiId').value = 'test@' + app;
+  }
+
+  function selectBank(btn, bank) {
+    document.querySelectorAll('.bank-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedBankName = bank;
+    document.getElementById('selectedBank').textContent = '✅ ' + bank + ' Bank selected';
+  }
+
+  function formatCard(input) {
+    let val = input.value.replace(/\D/g, '').substring(0, 16);
+    input.value = val.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  function formatExpiry(input) {
+    let val = input.value.replace(/\D/g, '');
+    if (val.length >= 2) val = val.substring(0,2) + '/' + val.substring(2,4);
+    input.value = val;
+  }
+
+  function validatePayment() {
+    if (!document.getElementById('address').value.trim()) {
+      showMsg('Please enter delivery address', 'error'); return false;
+    }
+    if (activeTab === 'card') {
+      const num = document.getElementById('cardNumber').value.replace(/\s/g,'');
+      const name = document.getElementById('cardName').value;
+      const exp = document.getElementById('cardExpiry').value;
+      const cvv = document.getElementById('cardCvv').value;
+      if (num.length < 16) { showMsg('Enter valid 16-digit card number', 'error'); return false; }
+      if (!name.trim())    { showMsg('Enter cardholder name', 'error'); return false; }
+      if (exp.length < 5)  { showMsg('Enter valid expiry date', 'error'); return false; }
+      if (cvv.length < 3)  { showMsg('Enter valid CVV', 'error'); return false; }
+    }
+    if (activeTab === 'upi') {
+      const upi = document.getElementById('upiId').value;
+      if (!upi.includes('@')) { showMsg('Enter valid UPI ID (e.g. name@upi)', 'error'); return false; }
+    }
+    if (activeTab === 'netbanking' && !selectedBankName) {
+      showMsg('Please select a bank', 'error'); return false;
+    }
+    return true;
+  }
+
+  async function processPayment() {
+    if (!validatePayment()) return;
+
+    // Show processing overlay
+    showProcessing('Processing Payment...', 'Please wait, do not close this window');
+
+    // Simulate payment gateway delay (2-3 seconds)
+    await sleep(1500);
+    updateProcessing('Verifying Details...', 'Connecting to payment gateway');
+
+    await sleep(1500);
+    updateProcessing('Authenticating...', 'Securing your transaction');
+
+    await sleep(1000);
+
+    // 95% success rate simulation
+    const success = Math.random() > 0.05;
+
+    if (success) {
+      updateProcessing('Payment Successful! ✅', 'Placing your order now...', true);
+      await sleep(1000);
+
+      // Place order via API
+      const orderRequest = {
+        items: cart.map(c => ({ menuItemId: c.menuItemId, quantity: c.quantity })),
+        deliveryAddress: document.getElementById('address').value,
+        paymentMethod: activeTab.toUpperCase()
+      };
+
+      try {
+        const res = await fetch('/api/orders/place', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify(orderRequest)
+        });
+        const data = await res.json();
+        if (data.id) {
+          localStorage.removeItem('cart');
+          hideProcessing();
+          window.location.href = '/order/success.html?orderId=' + data.id;
+        } else {
+          showPaymentFail('Order placement failed. Please try again.');
+        }
+      } catch (e) {
+        showPaymentFail('Network error. Please try again.');
+      }
+
+    } else {
+      // Simulate payment failure
+      await sleep(500);
+      showPaymentFail('Payment declined by bank. Please try another method.');
+    }
+  }
+
+  function showProcessing(title, msg) {
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('successTick').style.display = 'none';
+    document.getElementById('failCross').style.display = 'none';
+    document.getElementById('processingTitle').textContent = title;
+    document.getElementById('processingMsg').textContent = msg;
+    document.getElementById('processingAmount').textContent = '₹' + total.toFixed(2);
+    document.getElementById('processingOverlay').classList.add('show');
+  }
+
+  function updateProcessing(title, msg, success = false) {
+    document.getElementById('processingTitle').textContent = title;
+    document.getElementById('processingMsg').textContent = msg;
+    if (success) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('successTick').style.display = 'block';
+    }
+  }
+
+  function hideProcessing() {
+    document.getElementById('processingOverlay').classList.remove('show');
+  }
+
+  function showPaymentFail(reason) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('failCross').style.display = 'block';
+    document.getElementById('processingTitle').textContent = 'Payment Failed';
+    document.getElementById('processingMsg').textContent = reason;
+    document.getElementById('processingAmount').textContent = '';
+    setTimeout(() => {
+      hideProcessing();
+      showMsg(reason + ' Please try again.', 'error');
+    }, 2500);
+  }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function showMsg(msg, type) {
+    document.getElementById('msg').innerHTML =
+      `<div class="alert alert-${type}">${msg}</div>`;
+    window.scrollTo(0, 0);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>My Orders - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div class="nav-links">
+    <a href="/menu/menu.html">Menu</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">My Orders 📋</h1>
+  <div id="ordersList"></div>
+  <div id="emptyMsg" style="display:none;text-align:center;padding:60px;color:#888">
+    <div style="font-size:4rem">📋</div>
+    <p>No orders yet!</p>
+    <a href="/menu/menu.html" class="btn-orange" style="margin-top:16px;display:inline-block">Order Now</a>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/auth/login.html';
+
+  const BADGE = {
+    'PLACED': 'badge-placed', 'CONFIRMED': 'badge-confirmed',
+    'PREPARING': 'badge-preparing', 'OUT_FOR_DELIVERY': 'badge-delivery',
+    'DELIVERED': 'badge-delivered'
+  };
+
+  async function loadOrders() {
+    const res = await fetch('/api/orders/my', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const orders = await res.json();
+
+    if (!orders.length) {
+      document.getElementById('emptyMsg').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('ordersList').innerHTML = orders.map(o => `
+      <div style="background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <span style="font-weight:700;font-size:1.05rem">Order #${o.id}</span>
+            <span class="badge ${BADGE[o.status] || ''}" style="margin-left:12px">${o.status.replace(/_/g,' ')}</span>
+          </div>
+          <div style="color:#888;font-size:0.85rem">${new Date(o.orderTime).toLocaleDateString('en-IN', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>
+        <div style="color:#666;font-size:0.9rem;margin-bottom:8px">
+          📍 ${o.deliveryAddress || 'N/A'}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0">
+          <span style="font-weight:700;color:#ff6b35;font-size:1.05rem">₹${o.totalAmount?.toFixed(2)}</span>
+          <div style="display:flex;gap:10px">
+            ${o.status !== 'DELIVERED' ? `<button class="btn-orange" onclick="window.location.href='/order/tracking.html?orderId=${o.id}'">Track</button>` : ''}
+            <button class="btn-outline" onclick="viewItems(${o.id})">View Items</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function viewItems(id) {
+    window.location.href = '/order/tracking.html?orderId=' + id;
+  }
+
+  function logout() { localStorage.clear(); window.location.href = '/'; }
+  loadOrders();
+</script>
+</body>
+</html>

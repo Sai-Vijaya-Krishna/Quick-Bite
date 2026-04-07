@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Manage Menu - QuickBite Admin</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="sidebar">
+    <div class="brand">🍔 QuickBite Admin</div>
+    <a href="/admin/dashboard.html">📊 Dashboard</a>
+    <a href="/admin/manage-orders.html">📋 Manage Orders</a>
+    <a href="/admin/manage-menu.html" class="active">🍔 Manage Menu</a>
+    <a href="#" onclick="logout()">🚪 Logout</a>
+  </div>
+
+  <div class="main-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+      <h1>Manage Menu</h1>
+      <button class="btn-orange" onclick="openModal()">+ Add Item</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <table class="table">
+      <thead>
+        <tr><th>Name</th><th>Category</th><th>Price</th><th>Available</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="menuBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h3 id="modalTitle">Add Menu Item</h3>
+    <input type="hidden" id="editId"/>
+    <div class="form-group">
+      <label>Item Name</label>
+      <input type="text" id="itemName" placeholder="e.g. Cheese Burger"/>
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" id="itemDesc" placeholder="Short description"/>
+    </div>
+    <div class="form-group">
+      <label>Price (₹)</label>
+      <input type="number" id="itemPrice" placeholder="e.g. 149"/>
+    </div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="itemCategory">
+        <option value="BURGER">Burger</option>
+        <option value="PIZZA">Pizza</option>
+        <option value="WRAPS">Wraps</option>
+        <option value="SIDES">Sides</option>
+        <option value="DRINKS">Drinks</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Available</label>
+      <select id="itemAvailable">
+        <option value="true">Yes</option>
+        <option value="false">No</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:20px">
+      <button class="btn-orange" style="flex:1" onclick="saveItem()">Save</button>
+      <button class="btn-outline" style="flex:1" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (!token || role !== 'ADMIN') window.location.href = '/auth/login.html';
+
+  async function loadMenu() {
+    const res = await fetch('/api/admin/menu', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const items = await res.json();
+    document.getElementById('menuBody').innerHTML = items.map(item => `
+      <tr>
+        <td><strong>${item.name}</strong><br><small style="color:#888">${item.description}</small></td>
+        <td><span style="background:#fff3cd;color:#856404;padding:3px 10px;border-radius:20px;font-size:0.8rem">${item.category}</span></td>
+        <td><strong style="color:#ff6b35">₹${item.price}</strong></td>
+        <td>
+          <span style="color:${item.available ? '#4caf50' : '#f44336'};font-weight:600">
+            ${item.available ? '✅ Yes' : '❌ No'}
+          </span>
+        </td>
+        <td>
+          <button class="btn-outline" style="font-size:0.8rem;padding:6px 12px;margin-right:6px" onclick='editItem(${JSON.stringify(item)})'>Edit</button>
+          <button style="background:#f44336;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem" onclick="deleteItem(${item.id})">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function openModal() {
+    document.getElementById('modalTitle').textContent = 'Add Menu Item';
+    document.getElementById('editId').value = '';
+    document.getElementById('itemName').value = '';
+    document.getElementById('itemDesc').value = '';
+    document.getElementById('itemPrice').value = '';
+    document.getElementById('itemCategory').value = 'BURGER';
+    document.getElementById('itemAvailable').value = 'true';
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function editItem(item) {
+    document.getElementById('modalTitle').textContent = 'Edit Menu Item';
+    document.getElementById('editId').value = item.id;
+    document.getElementById('itemName').value = item.name;
+    document.getElementById('itemDesc').value = item.description;
+    document.getElementById('itemPrice').value = item.price;
+    document.getElementById('itemCategory').value = item.category;
+    document.getElementById('itemAvailable').value = String(item.available);
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+  }
+
+  async function saveItem() {
+    const id = document.getElementById('editId').value;
+    const body = {
+      name: document.getElementById('itemName').value,
+      description: document.getElementById('itemDesc').value,
+      price: parseFloat(document.getElementById('itemPrice').value),
+      category: document.getElementById('itemCategory').value,
+      available: document.getElementById('itemAvailable').value === 'true'
+    };
+    if (!body.name || !body.price) { alert('Name and price are required'); return; }
+
+    const url = id ? `/api/admin/menu/${id}` : '/api/admin/menu';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      closeModal();
+      showMsg(id ? 'Item updated!' : 'Item added!', 'success');
+      loadMenu();
+    } else {
+      showMsg('Save failed', 'error');
+    }
+  }
+
+  async function deleteItem(id) {
+    if (!confirm('Delete this item?')) return;
+    const res = await fetch('/api/admin/menu/' + id, {
+      method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (res.ok) { showMsg('Item deleted', 'success'); loadMenu(); }
+    else showMsg('Delete failed', 'error');
+  }
+
+  function showMsg(msg, type) {
+    document.getElementById('msg').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    setTimeout(() => document.getElementById('msg').innerHTML = '', 3000);
+  }
+
+  function logout() { localStorage.clear(); window.location.href = '/auth/login.html'; }
+  loadMenu();
+</script>
+</body>
+</html>

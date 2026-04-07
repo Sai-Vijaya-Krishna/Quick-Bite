@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin Dashboard - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="sidebar">
+    <div class="brand">🍔 QuickBite Admin</div>
+    <a href="/admin/dashboard.html" class="active">📊 Dashboard</a>
+    <a href="/admin/manage-orders.html">📋 Manage Orders</a>
+    <a href="/admin/manage-menu.html">🍔 Manage Menu</a>
+    <a href="#" onclick="logout()" style="margin-top:auto">🚪 Logout</a>
+  </div>
+
+  <div class="main-content">
+    <h1 style="margin-bottom:24px;color:#333">Dashboard</h1>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-num" id="totalOrders">-</div><div class="stat-label">Total Orders</div></div>
+      <div class="stat-card"><div class="stat-num" id="totalUsers">-</div><div class="stat-label">Total Users</div></div>
+      <div class="stat-card"><div class="stat-num" id="preparing">-</div><div class="stat-label">Preparing</div></div>
+      <div class="stat-card"><div class="stat-num" id="outForDelivery">-</div><div class="stat-label">Out for Delivery</div></div>
+      <div class="stat-card"><div class="stat-num" id="delivered">-</div><div class="stat-label">Delivered</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px">
+      <div style="background:#fff;padding:24px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+        <h3 style="margin-bottom:16px">Orders by Status</h3>
+        <canvas id="statusChart" height="220"></canvas>
+      </div>
+      <div style="background:#fff;padding:24px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+        <h3 style="margin-bottom:16px">Order Distribution</h3>
+        <canvas id="pieChart" height="220"></canvas>
+      </div>
+    </div>
+
+    <div style="background:#fff;padding:24px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+      <h3 style="margin-bottom:16px">Recent Orders</h3>
+      <table class="table">
+        <thead><tr><th>Order ID</th><th>User</th><th>Amount</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody id="recentOrders"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (!token || role !== 'ADMIN') window.location.href = '/auth/login.html';
+
+  const BADGE = {
+    'PLACED': 'badge-placed', 'CONFIRMED': 'badge-confirmed',
+    'PREPARING': 'badge-preparing', 'OUT_FOR_DELIVERY': 'badge-delivery',
+    'DELIVERED': 'badge-delivered'
+  };
+
+  async function loadDashboard() {
+    const res = await fetch('/api/admin/dashboard', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await res.json();
+
+    document.getElementById('totalOrders').textContent = data.totalOrders;
+    document.getElementById('totalUsers').textContent = data.totalUsers;
+    document.getElementById('preparing').textContent = data.preparingOrders;
+    document.getElementById('outForDelivery').textContent = data.outForDelivery;
+    document.getElementById('delivered').textContent = data.deliveredOrders;
+
+    // Recent orders table
+    document.getElementById('recentOrders').innerHTML = (data.recentOrders || []).map(o => `
+      <tr>
+        <td>#${o.id}</td>
+        <td>${o.user?.name || 'N/A'}</td>
+        <td>₹${o.totalAmount?.toFixed(2) || '0'}</td>
+        <td><span class="badge ${BADGE[o.status] || ''}">${o.status?.replace(/_/g,' ')}</span></td>
+        <td>${new Date(o.orderTime).toLocaleDateString('en-IN', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>
+    `).join('');
+
+    // Bar chart
+    new Chart(document.getElementById('statusChart'), {
+      type: 'bar',
+      data: {
+        labels: ['Placed', 'Preparing', 'Out for Delivery', 'Delivered'],
+        datasets: [{
+          label: 'Orders',
+          data: [data.placedOrders, data.preparingOrders, data.outForDelivery, data.deliveredOrders],
+          backgroundColor: ['#ff6b35','#f7931e','#a855f7','#22c55e'],
+          borderRadius: 8
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // Pie chart
+    new Chart(document.getElementById('pieChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Placed', 'Preparing', 'Out for Delivery', 'Delivered'],
+        datasets: [{
+          data: [data.placedOrders, data.preparingOrders, data.outForDelivery, data.deliveredOrders],
+          backgroundColor: ['#ff6b35','#f7931e','#a855f7','#22c55e']
+        }]
+      },
+      options: { responsive: true }
+    });
+  }
+
+  function logout() { localStorage.clear(); window.location.href = '/auth/login.html'; }
+  loadDashboard();
+</script>
+</body>
+</html>

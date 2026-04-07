@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Track Order - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div class="nav-links">
+    <a href="/order/history.html">My Orders</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<div class="page" style="max-width:760px">
+  <h1 class="page-title">Track Your Order 📍</h1>
+
+  <div class="delivery-timer">
+    <div class="label">Estimated Delivery In</div>
+    <div class="time" id="timer">--:--</div>
+    <div class="label" id="timerLabel">Calculating...</div>
+  </div>
+
+  <div class="tracking-status" id="statusSteps">
+    <div class="status-step" id="step-PLACED">📋 Order Placed</div>
+    <div class="status-step" id="step-CONFIRMED">✅ Confirmed</div>
+    <div class="status-step" id="step-PREPARING">👨‍🍳 Preparing</div>
+    <div class="status-step" id="step-OUT_FOR_DELIVERY">🛵 On the way</div>
+    <div class="status-step" id="step-DELIVERED">🏠 Delivered</div>
+  </div>
+
+  <div id="map"></div>
+
+  <div style="background:#fff;padding:20px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.08);margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:700">Order #<span id="orderIdDisplay"></span></div>
+        <div id="currentStatus" style="color:#ff6b35;font-weight:600;margin-top:4px"></div>
+      </div>
+      <a href="/order/history.html" class="btn-outline">View All Orders</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/auth/login.html';
+
+  const params = new URLSearchParams(window.location.search);
+  const orderId = params.get('orderId');
+  document.getElementById('orderIdDisplay').textContent = orderId;
+
+  // Visakhapatnam coords as default
+  let map = L.map('map').setView([17.7231, 83.3012], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  const deliveryIcon = L.divIcon({
+    html: '<div style="font-size:2rem">🛵</div>',
+    className: '', iconSize: [40, 40]
+  });
+  const homeIcon = L.divIcon({
+    html: '<div style="font-size:2rem">🏠</div>',
+    className: '', iconSize: [40, 40]
+  });
+
+  let deliveryMarker = L.marker([17.7231, 83.3012], {icon: deliveryIcon}).addTo(map);
+  let homeMarker = L.marker([17.7231, 83.3012], {icon: homeIcon}).addTo(map)
+    .bindPopup('Delivery Location').openPopup();
+
+  const STATUS_ORDER = ['PLACED','CONFIRMED','PREPARING','OUT_FOR_DELIVERY','DELIVERED'];
+
+  function updateStatusUI(status) {
+    document.getElementById('currentStatus').textContent = status.replace(/_/g, ' ');
+    STATUS_ORDER.forEach((s, i) => {
+      const el = document.getElementById('step-' + s);
+      if (!el) return;
+      const currentIdx = STATUS_ORDER.indexOf(status);
+      if (i < currentIdx) el.className = 'status-step done';
+      else if (i === currentIdx) el.className = 'status-step active';
+      else el.className = 'status-step';
+    });
+  }
+
+  function startTimer(minutes) {
+    let secs = minutes * 60;
+    const interval = setInterval(() => {
+      if (secs <= 0) { clearInterval(interval); document.getElementById('timer').textContent = '00:00'; return; }
+      secs--;
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      document.getElementById('timer').textContent = m + ':' + s;
+    }, 1000);
+  }
+
+  // Load order details
+  async function loadOrder() {
+    const res = await fetch('/api/orders/' + orderId, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const order = await res.json();
+    updateStatusUI(order.status);
+    if (order.currentLat && order.currentLng) {
+      deliveryMarker.setLatLng([order.currentLat, order.currentLng]);
+    }
+    if (order.deliveryLat && order.deliveryLng) {
+      homeMarker.setLatLng([order.deliveryLat, order.deliveryLng]);
+    }
+    startTimer(35);
+    document.getElementById('timerLabel').textContent = 'Estimated arrival time';
+  }
+
+  // WebSocket for real-time updates
+  function connectWebSocket() {
+    const socket = new SockJS('/ws');
+    const stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+    stompClient.connect({}, () => {
+      stompClient.subscribe('/topic/order/' + orderId, (msg) => {
+        const update = JSON.parse(msg.body);
+        updateStatusUI(update.status);
+        if (update.currentLat && update.currentLng) {
+          deliveryMarker.setLatLng([update.currentLat, update.currentLng]);
+          map.panTo([update.currentLat, update.currentLng]);
+        }
+        if (update.status === 'DELIVERED') {
+          document.getElementById('timer').textContent = '00:00';
+          document.getElementById('timerLabel').textContent = 'Order Delivered!';
+        }
+      });
+    });
+  }
+
+  loadOrder();
+  connectWebSocket();
+
+  function logout() { localStorage.clear(); window.location.href = '/'; }
+</script>
+</body>
+</html>

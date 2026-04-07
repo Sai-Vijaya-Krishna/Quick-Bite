@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Track Order - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',sans-serif; background:#f4f4f4; }
+
+/* NAVBAR */
+.navbar {
+  display:flex; justify-content:space-between; align-items:center;
+  background:#ff6b35; padding:14px 32px; position:sticky; top:0; z-index:1000;
+  box-shadow:0 2px 8px rgba(0,0,0,0.15);
+}
+.navbar .brand { color:#fff; font-size:1.4rem; font-weight:800; text-decoration:none; }
+.navbar a { color:#fff; text-decoration:none; font-size:0.92rem; margin-left:20px; font-weight:500; }
+.navbar a:hover { text-decoration:underline; }
+
+/* TOP ETA BANNER — full width */
+.eta-banner {
+  background: linear-gradient(135deg, #ff6b35 0%, #f7531a 100%);
+  color:#fff; padding:32px 40px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:relative; overflow:hidden;
+}
+.eta-banner::after {
+  content:''; position:absolute; top:-80px; right:-80px;
+  width:280px; height:280px; background:rgba(255,255,255,0.06); border-radius:50%;
+}
+.eta-banner::before {
+  content:''; position:absolute; bottom:-60px; left:30%;
+  width:200px; height:200px; background:rgba(255,255,255,0.04); border-radius:50%;
+}
+.eta-left { z-index:1; }
+.eta-label { font-size:0.82rem; text-transform:uppercase; letter-spacing:1px; opacity:0.8; margin-bottom:6px; }
+.eta-time-row { display:flex; align-items:baseline; gap:8px; }
+.eta-num { font-size:5rem; font-weight:900; line-height:1; letter-spacing:-3px; }
+.eta-unit { font-size:1.5rem; font-weight:700; opacity:0.9; }
+.eta-msg { font-size:0.95rem; opacity:0.85; margin-top:6px; }
+.eta-clock { font-size:0.82rem; opacity:0.7; margin-top:4px; }
+.live-badge {
+  z-index:1; display:flex; align-items:center; gap:7px;
+  background:rgba(255,255,255,0.18); border-radius:30px;
+  padding:8px 18px; font-size:0.82rem; font-weight:700;
+  backdrop-filter:blur(4px);
+}
+.live-dot { width:9px; height:9px; background:#fff; border-radius:50%; animation:blink 1.2s infinite; }
+@keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+
+/* MAIN LAYOUT — two column */
+.main-grid {
+  display:grid;
+  grid-template-columns: 1fr 380px;
+  gap:0;
+  min-height:calc(100vh - 130px);
+}
+
+/* LEFT COLUMN */
+.left-col { display:flex; flex-direction:column; }
+
+/* STEPPER */
+.stepper-card {
+  background:#fff; padding:28px 40px;
+  border-bottom:1px solid #f0f0f0;
+}
+.stepper-card h3 { font-size:0.82rem; text-transform:uppercase; letter-spacing:1px; color:#999; margin-bottom:20px; }
+.stepper {
+  display:flex; align-items:flex-start;
+  justify-content:space-between; position:relative;
+}
+.stepper-line-bg {
+  position:absolute; top:20px; left:20px; right:20px;
+  height:3px; background:#eee; border-radius:4px;
+}
+.stepper-line-fill {
+  height:100%; background:#ff6b35; border-radius:4px;
+  transition:width 0.9s cubic-bezier(0.4,0,0.2,1);
+}
+.s-step { display:flex; flex-direction:column; align-items:center; gap:10px; z-index:1; flex:1; }
+.s-circle {
+  width:40px; height:40px; border-radius:50%;
+  border:3px solid #e0e0e0; background:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.1rem; transition:all 0.4s ease;
+}
+.s-circle.done  { background:#ff6b35; border-color:#ff6b35; }
+.s-circle.active {
+  border-color:#ff6b35; background:#fff6f3;
+  animation:pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100%{ box-shadow:0 0 0 0 rgba(255,107,53,0.3); }
+  50%    { box-shadow:0 0 0 10px rgba(255,107,53,0); }
+}
+.s-label { font-size:0.72rem; font-weight:600; text-align:center; color:#bbb; line-height:1.3; max-width:72px; }
+.s-label.done,.s-label.active { color:#ff6b35; }
+
+/* MAP — full left width */
+#map { flex:1; min-height:400px; width:100%; }
+
+/* RIGHT COLUMN */
+.right-col {
+  background:#fff; border-left:1px solid #eeee;
+  display:flex; flex-direction:column;
+  overflow-y:auto; max-height:calc(100vh - 130px);
+  position:sticky; top:64px;
+}
+
+/* ORDER INFO */
+.order-info {
+  padding:24px; border-bottom:1px solid #f5f5f5;
+}
+.order-info h3 { font-size:1rem; font-weight:700; margin-bottom:4px; }
+.order-id { font-size:0.82rem; color:#888; }
+
+/* PARTNER CARD */
+.partner-box {
+  padding:20px 24px; border-bottom:1px solid #f5f5f5;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.partner-left { display:flex; align-items:center; gap:14px; }
+.p-avatar {
+  width:50px; height:50px; border-radius:50%; background:#ff6b35;
+  display:flex; align-items:center; justify-content:center; font-size:1.4rem;
+  flex-shrink:0;
+}
+.p-name { font-weight:700; font-size:0.95rem; }
+.p-meta { font-size:0.78rem; color:#888; margin-top:3px; }
+.call-btn {
+  width:42px; height:42px; border-radius:50%; background:#fff3ef;
+  border:2px solid #ff6b35; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+  transition:all 0.2s; flex-shrink:0;
+}
+.call-btn:hover { background:#ff6b35; }
+
+/* LIVE UPDATES */
+.updates-box { padding:20px 24px; flex:1; }
+.updates-title { font-weight:700; font-size:0.9rem; color:#333; margin-bottom:16px;
+  display:flex; align-items:center; gap:8px; }
+.update-item {
+  display:flex; gap:14px; padding-bottom:16px;
+  position:relative; animation:slideDown 0.35s ease;
+}
+@keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+.update-item::before {
+  content:''; position:absolute; left:7px; top:18px;
+  height:100%; width:2px; background:#f0f0f0;
+}
+.update-item:last-child::before { display:none; }
+.u-dot {
+  width:16px; height:16px; border-radius:50%; flex-shrink:0;
+  margin-top:2px; z-index:1; transition:background 0.3s;
+}
+.u-dot.orange { background:#ff6b35; }
+.u-dot.gray   { background:#ddd; }
+.u-text { font-size:0.86rem; font-weight:600; color:#222; line-height:1.4; }
+.u-time { font-size:0.74rem; color:#bbb; margin-top:3px; }
+
+/* DELIVERED OVERLAY on right col */
+.delivered-panel {
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  padding:40px 24px; text-align:center; flex:1;
+  background:linear-gradient(160deg,#e8f5e9,#f1f8e9);
+}
+.delivered-panel .big-icon { font-size:4rem; margin-bottom:16px; }
+.delivered-panel h2 { font-size:1.3rem; font-weight:800; color:#2e7d32; margin-bottom:8px; }
+.delivered-panel p  { font-size:0.88rem; color:#555; line-height:1.6; }
+.rate-btn {
+  margin-top:24px; background:#ff6b35; color:#fff;
+  border:none; padding:12px 28px; border-radius:50px;
+  font-size:0.92rem; font-weight:700; cursor:pointer;
+  text-decoration:none; display:inline-block;
+}
+
+/* Responsive */
+@media(max-width:860px){
+  .main-grid { grid-template-columns:1fr; }
+  .right-col { position:static; max-height:none; border-left:none; border-top:1px solid #eee; }
+  .eta-num   { font-size:3.5rem; }
+  .eta-banner{ padding:24px 20px; }
+  #map       { min-height:280px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div>
+    <a href="/order/history.html">My Orders</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<!-- ETA BANNER -->
+<div class="eta-banner" id="etaBanner">
+  <div class="eta-left">
+    <div class="eta-label">Estimated arrival</div>
+    <div class="eta-time-row">
+      <div class="eta-num" id="etaNum">--</div>
+      <div class="eta-unit">mins</div>
+    </div>
+    <div class="eta-msg"  id="etaMsg">Fetching your order...</div>
+    <div class="eta-clock" id="etaClock"></div>
+  </div>
+  <div class="live-badge"><span class="live-dot"></span> LIVE TRACKING</div>
+</div>
+
+<div class="main-grid">
+
+  <!-- LEFT -->
+  <div class="left-col">
+
+    <!-- STEPPER -->
+    <div class="stepper-card">
+      <h3>Order Status</h3>
+      <div class="stepper">
+        <div class="stepper-line-bg">
+          <div class="stepper-line-fill" id="lineFill" style="width:0%"></div>
+        </div>
+        <div class="s-step">
+          <div class="s-circle" id="c-PLACED">📋</div>
+          <div class="s-label" id="l-PLACED">Order<br>Placed</div>
+        </div>
+        <div class="s-step">
+          <div class="s-circle" id="c-CONFIRMED">✅</div>
+          <div class="s-label" id="l-CONFIRMED">Confirmed</div>
+        </div>
+        <div class="s-step">
+          <div class="s-circle" id="c-PREPARING">👨‍🍳</div>
+          <div class="s-label" id="l-PREPARING">Preparing</div>
+        </div>
+        <div class="s-step">
+          <div class="s-circle" id="c-OUT_FOR_DELIVERY">🛵</div>
+          <div class="s-label" id="l-OUT_FOR_DELIVERY">On the<br>Way</div>
+        </div>
+        <div class="s-step">
+          <div class="s-circle" id="c-DELIVERED">🏠</div>
+          <div class="s-label" id="l-DELIVERED">Delivered</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div id="map"></div>
+
+  </div><!-- end left-col -->
+
+  <!-- RIGHT -->
+  <div class="right-col">
+
+    <!-- ORDER INFO -->
+    <div class="order-info">
+      <h3>Order #<span id="orderIdTxt"></span></h3>
+      <div class="order-id" id="orderStatusTxt">Loading...</div>
+    </div>
+
+    <!-- PARTNER -->
+    <div class="partner-box" id="partnerBox">
+      <div class="partner-left">
+        <div class="p-avatar">🛵</div>
+        <div>
+          <div class="p-name"  id="pName">QuickBite Delivery</div>
+          <div class="p-meta" id="pMeta">⭐ 4.8 · Bike · AP 28 CD 1234</div>
+        </div>
+      </div>
+      <button class="call-btn" title="Call partner">📞</button>
+    </div>
+
+    <!-- UPDATES -->
+    <div class="updates-box" id="updatesSection">
+      <div class="updates-title">
+        <span style="color:#ff6b35">●</span> Live Updates
+      </div>
+      <div id="feedList"></div>
+    </div>
+
+    <!-- DELIVERED PANEL -->
+    <div class="delivered-panel" id="deliveredPanel">
+      <div class="big-icon">🎉</div>
+      <h2>Order Delivered!</h2>
+      <p>Enjoy your meal!<br>Thank you for ordering with QuickBite.</p>
+      <a href="/order/history.html" class="rate-btn">View All Orders</a>
+    </div>
+
+  </div><!-- end right-col -->
+
+</div><!-- end main-grid -->
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) window.location.href = '/auth/login.html';
+
+const orderId = new URLSearchParams(window.location.search).get('orderId');
+document.getElementById('orderIdTxt').textContent = orderId;
+
+/* ── MAP ── */
+const map = L.map('map').setView([17.7231, 83.3012], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { attribution:'© OpenStreetMap' }).addTo(map);
+
+const bikeIcon = L.divIcon({
+  html:'<div style="font-size:2.2rem;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.35))">🛵</div>',
+  className:'', iconSize:[44,44]
+});
+const homeIcon = L.divIcon({
+  html:'<div style="font-size:2.2rem;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.35))">🏠</div>',
+  className:'', iconSize:[44,44]
+});
+
+let bikeMarker = L.marker([17.7231, 83.3012], {icon:bikeIcon}).addTo(map);
+let homeMarker = L.marker([17.7231, 83.3012], {icon:homeIcon}).addTo(map)
+                  .bindPopup('<b>📍 Your Location</b>').openPopup();
+
+/* ── CONFIG ── */
+const STATUS_CFG = {
+  'PLACED':           { mins:38, pct:8,  msg:'Waiting for restaurant to accept your order', badge:'Order placed' },
+  'CONFIRMED':        { mins:32, pct:28, msg:'Restaurant has accepted your order 🎉',        badge:'Order confirmed' },
+  'PREPARING':        { mins:20, pct:55, msg:'Chef is preparing your food 👨‍🍳',              badge:'Being prepared' },
+  'OUT_FOR_DELIVERY': { mins:10, pct:80, msg:'Delivery partner is on the way 🛵',            badge:'Out for delivery' },
+  'DELIVERED':        { mins:0,  pct:100,msg:'Your order has been delivered!',               badge:'Delivered ✅' }
+};
+const STATUS_ORDER = ['PLACED','CONFIRMED','PREPARING','OUT_FOR_DELIVERY','DELIVERED'];
+const PARTNERS = ['Ravi Kumar','Suresh Babu','Kiran Reddy','Anil Prasad','Vijay Rao'];
+const VEHICLES  = ['Bike · TS 09 CD 5678','Bike · AP 28 EF 3421','Bike · TS 11 GH 7890'];
+
+let timerRef = null;
+let feedItems = [];
+
+/* ── ETA countdown ── */
+function startCountdown(mins) {
+  if (timerRef) clearInterval(timerRef);
+  let secs = mins * 60;
+  render(secs);
+  timerRef = setInterval(() => {
+    secs = Math.max(0, secs - 1);
+    render(secs);
+    if (secs === 0) clearInterval(timerRef);
+  }, 1000);
+}
+
+function render(secs) {
+  const m = Math.ceil(secs / 60);
+  document.getElementById('etaNum').textContent = m > 0 ? m : '< 1';
+}
+
+function arrivalStr(mins) {
+  if (mins <= 0) return '';
+  const t = new Date(Date.now() + mins * 60000);
+  return 'Arriving by ' + t.toLocaleTimeString('en-IN',
+    { hour:'2-digit', minute:'2-digit', hour12:true });
+}
+
+/* ── Feed ── */
+function pushUpdate(text) {
+  const time = new Date().toLocaleTimeString('en-IN',
+    { hour:'2-digit', minute:'2-digit', hour12:true });
+  feedItems.unshift({ text, time });
+
+  document.getElementById('feedList').innerHTML = feedItems.map((f, i) => `
+    <div class="update-item">
+      <div class="u-dot ${i === 0 ? 'orange' : 'gray'}"></div>
+      <div>
+        <div class="u-text">${f.text}</div>
+        <div class="u-time">${f.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── Apply status ── */
+function applyStatus(status) {
+  const cfg = STATUS_CFG[status];
+  if (!cfg) return;
+
+  /* Status text */
+  document.getElementById('orderStatusTxt').textContent =
+    status.replace(/_/g,' ');
+
+  /* ETA banner */
+  document.getElementById('etaMsg').textContent   = cfg.msg;
+  document.getElementById('etaClock').textContent = arrivalStr(cfg.mins);
+
+  if (status === 'DELIVERED') {
+    if (timerRef) clearInterval(timerRef);
+    /* Hide ETA banner + show delivered */
+    document.getElementById('etaBanner').style.display    = 'none';
+    document.getElementById('deliveredPanel').style.display = 'flex';
+    document.getElementById('updatesSection').style.display = 'none';
+    document.getElementById('partnerBox').style.display    = 'none';
+  } else {
+    startCountdown(cfg.mins);
+  }
+
+  /* Progress line */
+  document.getElementById('lineFill').style.width = cfg.pct + '%';
+
+  /* Circles */
+  const idx = STATUS_ORDER.indexOf(status);
+  STATUS_ORDER.forEach((s, i) => {
+    const c = document.getElementById('c-' + s);
+    const l = document.getElementById('l-' + s);
+    if (!c) return;
+    if (i < idx)      { c.className = 's-circle done';   l.className = 's-label done'; }
+    else if (i === idx){ c.className = 's-circle active'; l.className = 's-label active'; }
+    else               { c.className = 's-circle';        l.className = 's-label'; }
+  });
+
+  /* Feed */
+  pushUpdate(cfg.badge);
+
+  /* Partner details on OUT_FOR_DELIVERY */
+  if (status === 'OUT_FOR_DELIVERY') {
+    document.getElementById('pName').textContent =
+      PARTNERS[Math.floor(Math.random() * PARTNERS.length)];
+    document.getElementById('pMeta').textContent =
+      '⭐ 4.8 · ' + VEHICLES[Math.floor(Math.random() * VEHICLES.length)];
+  }
+}
+
+/* ── Load order ── */
+async function loadOrder() {
+  try {
+    const res   = await fetch('/api/orders/' + orderId,
+      { headers:{ 'Authorization':'Bearer ' + token } });
+    const order = await res.json();
+
+    const dlat = order.deliveryLat || 17.7231;
+    const dlng = order.deliveryLng || 83.3012;
+    const clat = order.currentLat  || 17.7231;
+    const clng = order.currentLng  || 83.3012;
+
+    homeMarker.setLatLng([dlat, dlng]);
+    bikeMarker.setLatLng([clat, clng]);
+    map.fitBounds([[dlat,dlng],[clat,clng]], { padding:[60,60] });
+
+    applyStatus(order.status);
+  } catch(e) {
+    document.getElementById('etaMsg').textContent = 'Could not load order.';
+  }
+}
+
+/* ── WebSocket ── */
+function connectWS() {
+  try {
+    const sock   = new SockJS('/ws');
+    const client = Stomp.over(sock);
+    client.debug  = null;
+    client.connect({}, () => {
+      client.subscribe('/topic/order/' + orderId, msg => {
+        const u = JSON.parse(msg.body);
+        applyStatus(u.status);
+        if (u.currentLat && u.currentLng) {
+          bikeMarker.setLatLng([u.currentLat, u.currentLng]);
+          map.panTo([u.currentLat, u.currentLng], { animate:true, duration:1.2 });
+        }
+      });
+    });
+  } catch(e) { console.log('WS:', e); }
+}
+
+function logout() { localStorage.clear(); window.location.href = '/'; }
+
+loadOrder();
+connectWS();
+</script>
+</body>
+</html>

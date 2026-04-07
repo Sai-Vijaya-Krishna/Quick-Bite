@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Cart - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div class="nav-links">
+    <a href="/menu/menu.html">Menu</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<div class="page" style="max-width:680px">
+  <h1 class="page-title">Your Cart 🛒</h1>
+  <div id="cartItems"></div>
+
+  <div id="emptyMsg" style="display:none;text-align:center;padding:60px;color:#888">
+    <div style="font-size:4rem">🛒</div>
+    <p>Your cart is empty!</p>
+    <a href="/menu/menu.html" class="btn-orange" style="margin-top:16px;display:inline-block">Browse Menu</a>
+  </div>
+
+  <div id="cartSummary" style="background:#fff;padding:24px;border-radius:16px;margin-top:24px;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <span>Subtotal</span><span id="subtotal">₹0</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+      <span>Delivery Fee</span><span>₹30</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-weight:700;font-size:1.1rem;border-top:1px solid #eee;padding-top:12px">
+      <span>Total</span><span id="total" style="color:#ff6b35">₹0</span>
+    </div>
+    <button class="btn-orange" style="width:100%;margin-top:20px;padding:14px;font-size:1rem" onclick="goToPayment()">Proceed to Payment →</button>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/auth/login.html';
+
+  let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+
+  function render() {
+    const container = document.getElementById('cartItems');
+    if (cart.length === 0) {
+      container.innerHTML = '';
+      document.getElementById('emptyMsg').style.display = 'block';
+      document.getElementById('cartSummary').style.display = 'none';
+      return;
+    }
+    document.getElementById('emptyMsg').style.display = 'none';
+    document.getElementById('cartSummary').style.display = 'block';
+
+    container.innerHTML = cart.map((item, i) => `
+      <div class="cart-item">
+        <div>
+          <div style="font-weight:600">${item.name}</div>
+          <div style="color:#ff6b35;font-weight:700">₹${item.price}</div>
+        </div>
+        <div class="qty-control">
+          <button class="qty-btn" onclick="changeQty(${i}, -1)">-</button>
+          <span style="font-weight:600;min-width:24px;text-align:center">${item.quantity}</span>
+          <button class="qty-btn" onclick="changeQty(${i}, 1)">+</button>
+          <button onclick="removeItem(${i})" style="background:none;border:none;color:#f44336;cursor:pointer;margin-left:8px;font-size:1.2rem">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+
+    const subtotal = cart.reduce((s, c) => s + c.price * c.quantity, 0);
+    document.getElementById('subtotal').textContent = '₹' + subtotal.toFixed(2);
+    document.getElementById('total').textContent = '₹' + (subtotal + 30).toFixed(2);
+  }
+
+  function changeQty(i, delta) {
+    cart[i].quantity += delta;
+    if (cart[i].quantity <= 0) cart.splice(i, 1);
+    save();
+  }
+
+  function removeItem(i) { cart.splice(i, 1); save(); }
+
+  function save() { localStorage.setItem('cart', JSON.stringify(cart)); render(); }
+
+  function goToPayment() {
+    if (cart.length === 0) return alert('Cart is empty!');
+    window.location.href = '/order/payment.html';
+  }
+
+  function logout() { localStorage.clear(); window.location.href = '/'; }
+
+  render();
+</script>
+</body>
+</html>

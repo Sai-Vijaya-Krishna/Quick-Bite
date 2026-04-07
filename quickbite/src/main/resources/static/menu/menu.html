@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Menu - QuickBite</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<style>
+  .menu-img { width:100%; height:140px; object-fit:cover; background:#ffe8d6; display:flex; align-items:center; justify-content:center; font-size:3rem; }
+  .cart-float { position:fixed; bottom:24px; right:24px; background:#ff6b35; color:#fff; padding:14px 24px; border-radius:50px; cursor:pointer; font-weight:700; box-shadow:0 4px 16px rgba(255,107,53,0.4); font-size:1rem; border:none; }
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="/" class="brand">🍔 QuickBite</a>
+  <div class="nav-links">
+    <span id="userName" style="color:#fff;margin-right:12px"></span>
+    <a href="/order/history.html">My Orders</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">Our Menu 🍽️</h1>
+  <div class="categories" id="categories">
+    <button class="cat-btn active" onclick="filterMenu('ALL', this)">All</button>
+    <button class="cat-btn" onclick="filterMenu('BURGER', this)">🍔 Burgers</button>
+    <button class="cat-btn" onclick="filterMenu('PIZZA', this)">🍕 Pizzas</button>
+    <button class="cat-btn" onclick="filterMenu('WRAPS', this)">🌯 Wraps</button>
+    <button class="cat-btn" onclick="filterMenu('SIDES', this)">🍟 Sides</button>
+    <button class="cat-btn" onclick="filterMenu('DRINKS', this)">🥤 Drinks</button>
+  </div>
+  <br/>
+  <div class="menu-grid" id="menuGrid"></div>
+</div>
+
+<button class="cart-float" onclick="goToCart()">🛒 Cart (<span id="cartCount">0</span>)</button>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) window.location.href = '/auth/login.html';
+  document.getElementById('userName').textContent = 'Hi, ' + (localStorage.getItem('name') || '');
+
+  let allItems = [];
+  let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+
+  const EMOJI = { BURGER:'🍔', PIZZA:'🍕', WRAPS:'🌯', SIDES:'🍟', DRINKS:'🥤' };
+
+  async function loadMenu() {
+    const res = await fetch('/api/menu', { headers: { 'Authorization': 'Bearer ' + token } });
+    allItems = await res.json();
+    renderMenu(allItems);
+    updateCartCount();
+  }
+
+  function renderMenu(items) {
+    const grid = document.getElementById('menuGrid');
+    grid.innerHTML = items.map(item => `
+      <div class="card">
+        <div class="menu-img">${EMOJI[item.category] || '🍽️'}</div>
+        <div class="card-body">
+          <div class="card-title">${item.name}</div>
+          <div class="card-text">${item.description}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+            <span class="card-price">₹${item.price}</span>
+            <button class="btn-orange" onclick="addToCart(${item.id}, '${item.name}', ${item.price})">Add +</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function filterMenu(cat, btn) {
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMenu(cat === 'ALL' ? allItems : allItems.filter(i => i.category === cat));
+  }
+
+  function addToCart(id, name, price) {
+    const existing = cart.find(c => c.menuItemId === id);
+    if (existing) existing.quantity++;
+    else cart.push({ menuItemId: id, name, price, quantity: 1 });
+    localStorage.setItem('cart', JSON.stringify(cart));
+    updateCartCount();
+    showToast(name + ' added to cart!');
+  }
+
+  function updateCartCount() {
+    document.getElementById('cartCount').textContent = cart.reduce((s, c) => s + c.quantity, 0);
+  }
+
+  function goToCart() { window.location.href = '/cart/cart.html'; }
+  function logout() { localStorage.clear(); window.location.href = '/'; }
+
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:80px;right:24px;background:#333;color:#fff;padding:10px 20px;border-radius:10px;z-index:3000;font-size:0.9rem';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2000);
+  }
+
+  loadMenu();
+</script>
+</body>
+</html>

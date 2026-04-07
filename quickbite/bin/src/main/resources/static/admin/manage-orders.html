@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Manage Orders - QuickBite Admin</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="sidebar">
+    <div class="brand">🍔 QuickBite Admin</div>
+    <a href="/admin/dashboard.html">📊 Dashboard</a>
+    <a href="/admin/manage-orders.html" class="active">📋 Manage Orders</a>
+    <a href="/admin/manage-menu.html">🍔 Manage Menu</a>
+    <a href="#" onclick="logout()">🚪 Logout</a>
+  </div>
+
+  <div class="main-content">
+    <h1 style="margin-bottom:8px">Manage Orders</h1>
+    <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap">
+      <button class="cat-btn active" onclick="filterOrders('ALL',this)">All</button>
+      <button class="cat-btn" onclick="filterOrders('PLACED',this)">Placed</button>
+      <button class="cat-btn" onclick="filterOrders('CONFIRMED',this)">Confirmed</button>
+      <button class="cat-btn" onclick="filterOrders('PREPARING',this)">Preparing</button>
+      <button class="cat-btn" onclick="filterOrders('OUT_FOR_DELIVERY',this)">Out for Delivery</button>
+      <button class="cat-btn" onclick="filterOrders('DELIVERED',this)">Delivered</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Customer</th>
+          <th>Address</th>
+          <th>Amount</th>
+          <th>Payment</th>
+          <th>Status</th>
+          <th>Update Status</th>
+        </tr>
+      </thead>
+      <tbody id="ordersBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  if (!token || role !== 'ADMIN') window.location.href = '/auth/login.html';
+
+  let allOrders = [];
+
+  const BADGE = {
+    'PLACED':'badge-placed','CONFIRMED':'badge-confirmed',
+    'PREPARING':'badge-preparing','OUT_FOR_DELIVERY':'badge-delivery','DELIVERED':'badge-delivered'
+  };
+  const NEXT_STATUS = {
+    'PLACED':'CONFIRMED','CONFIRMED':'PREPARING',
+    'PREPARING':'OUT_FOR_DELIVERY','OUT_FOR_DELIVERY':'DELIVERED'
+  };
+  const STATUS_LABEL = {
+    'PLACED':'Confirm','CONFIRMED':'Start Preparing',
+    'PREPARING':'Send for Delivery','OUT_FOR_DELIVERY':'Mark Delivered'
+  };
+
+  async function loadOrders() {
+    const res = await fetch('/api/admin/orders', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    allOrders = await res.json();
+    renderOrders(allOrders);
+  }
+
+  function renderOrders(orders) {
+    document.getElementById('ordersBody').innerHTML = orders.length === 0
+      ? `<tr><td colspan="7" style="text-align:center;color:#888;padding:32px">No orders found</td></tr>`
+      : orders.map(o => `
+        <tr>
+          <td><strong>#${o.id}</strong></td>
+          <td>${o.user?.name || 'N/A'}<br><small style="color:#888">${o.user?.email || ''}</small></td>
+          <td style="max-width:160px;font-size:0.85rem">${o.deliveryAddress || 'N/A'}</td>
+          <td><strong>₹${o.totalAmount?.toFixed(2) || '0'}</strong></td>
+          <td style="font-size:0.85rem">${o.paymentMethod?.replace(/_/g,' ') || 'N/A'}</td>
+          <td><span class="badge ${BADGE[o.status] || ''}">${o.status?.replace(/_/g,' ')}</span></td>
+          <td>
+            ${NEXT_STATUS[o.status]
+              ? `<button class="btn-orange" style="font-size:0.8rem;padding:7px 14px" onclick="updateStatus(${o.id},'${NEXT_STATUS[o.status]}')">
+                  ${STATUS_LABEL[o.status]}
+                </button>`
+              : `<span style="color:#4caf50;font-weight:600">✅ Done</span>`
+            }
+          </td>
+        </tr>
+      `).join('');
+  }
+
+  function filterOrders(status, btn) {
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderOrders(status === 'ALL' ? allOrders : allOrders.filter(o => o.status === status));
+  }
+
+  async function updateStatus(orderId, status) {
+    const res = await fetch(`/api/admin/orders/${orderId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ status })
+    });
+    if (res.ok) {
+      showMsg('Order #' + orderId + ' updated to ' + status.replace(/_/g,' '), 'success');
+      loadOrders();
+    } else {
+      showMsg('Update failed', 'error');
+    }
+  }
+
+  function showMsg(msg, type) {
+    document.getElementById('msg').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    setTimeout(() => document.getElementById('msg').innerHTML = '', 3000);
+  }
+
+  function logout() { localStorage.clear(); window.location.href = '/auth/login.html'; }
+  loadOrders();
+</script>
+</body>
+</html>

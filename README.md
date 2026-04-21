@@ -16,6 +16,21 @@
 **QuickBite** is a full-stack food ordering application where users can browse a menu, add items to a cart, place orders with multiple payment methods, and track their delivery in real time on a live map. Admins can manage the menu, update order statuses, and view analytics on a dashboard.
 
 ---
+## ScreenShots
+
+###HOME PAGE
+<img width="1919" height="900" alt="HomePage " src="https://github.com/user-attachments/assets/be6e64b7-065e-458c-b91b-4682bbda30b5" />
+
+###ADMIN PAGE
+<img width="1919" height="900" alt="Adminpage-1" src="https://github.com/user-attachments/assets/97564563-4f5d-4a68-9cff-cec9721f2880" />
+<img width="1919" height="904" alt="Adminpage-2" src="https://github.com/user-attachments/assets/f5afd773-cff9-45ee-bbfe-b9fa797fe5ab" />
+
+###USER PAGE
+<img width="1919" height="906" alt="Userbooking" src="https://github.com/user-attachments/assets/9d3bdf1a-9a13-4053-baea-bd02758cf802" />
+<img width="1919" height="908" alt="Userbooking-1" src="https://github.com/user-attachments/assets/e5d20083-cd13-434f-94fc-689ea04056ad" />
+<img width="1919" height="896" alt="Userbooking-2" src="https://github.com/user-attachments/assets/9e41186a-e84d-4c0e-b402-0cf00cbaf299" />
+<img width="1919" height="910" alt="Userbooking-3" src="https://github.com/user-attachments/assets/4f032cd3-2367-468f-98ea-62e0d888fe72" />
+
 
 ## ✨ Features
 

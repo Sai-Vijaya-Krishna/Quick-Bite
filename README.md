@@ -15,8 +15,14 @@
 
 **QuickBite** is a full-stack food ordering application where users can browse a menu, add items to a cart, place orders with multiple payment methods, and track their delivery in real time on a live map. Admins can manage the menu, update order statuses, and view analytics on a dashboard.
 
+## 🚀 Project Highlights
+- 🔐 JWT Authentication with role-based access (Admin/User)
+- ⚡ Real-time order tracking using WebSocket (no refresh)
+- 🗺️ Live delivery tracking with Leaflet map
+- 📦 End-to-end order lifecycle (cart → checkout → delivery)
+- 📊 Admin dashboard with analytics
 ---
-## ScreenShots
+## 📸 Screenshots
 
 ### HOME PAGE
 <img width="1919" height="900" alt="HomePage " src="https://github.com/user-attachments/assets/be6e64b7-065e-458c-b91b-4682bbda30b5" />
